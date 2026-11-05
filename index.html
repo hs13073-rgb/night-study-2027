@@ -41,6 +41,8 @@
   .tabs2 button { padding:6px 12px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; cursor:pointer; }
   .tabs2 button.on { background:var(--main); color:#fff; border-color:var(--main); }
   .tablewrap { overflow-x:auto; }
+  #r-rules h3, #r-rules-card h3 { margin:14px 0 6px; font-size:1rem; color:var(--main); }
+  #r-rules p { margin:4px 0; line-height:1.6; }
 </style>
 </head>
 <body>
@@ -57,9 +59,16 @@
 
 <!-- ===== 報名 ===== -->
 <section id="p-reg">
-  <div class="card">
-    <h2>學生報名</h2>
-    <div class="hint" id="r-sched" style="margin-bottom:6px"></div>
+  <div class="card" id="r-rules-card">
+    <h2>報名辦法及公約</h2>
+    <div id="r-rules">載入中…</div>
+    <h3>開放時程</h3>
+    <div class="hint" id="r-sched"></div>
+    <label style="font-weight:400;margin-top:16px"><input type="checkbox" id="r-agree"> 我已閱讀並同意以上報名辦法及公約</label>
+    <button class="act" id="r-start" disabled>報名／加退選</button>
+  </div>
+  <div class="card hide" id="r-form-card">
+    <h2>學生報名／加退選</h2>
     <div class="row">
       <div><label>班級</label><input type="text" id="r-cls" placeholder="例：901"></div>
       <div><label>座號</label><input type="number" id="r-seat" min="1" max="99"></div>
@@ -202,6 +211,14 @@ document.querySelectorAll('.tabs2 button[data-t]').forEach(b => b.onclick = () =
   ['day','vio','log'].forEach(t => $('t-' + t).classList.toggle('hide', t !== b.dataset.t));
 });
 
+/* ===== 同意公約後才進入報名表單 ===== */
+$('r-agree').onchange = () => { $('r-start').disabled = !$('r-agree').checked; };
+$('r-start').onclick = () => {
+  $('r-rules-card').classList.add('hide');
+  $('r-form-card').classList.remove('hide');
+  window.scrollTo(0, 0);
+};
+
 /* ===== 初始化 ===== */
 $('r-days').innerHTML = DAYS.map(d => `<label><input type="checkbox" value="${d}"> ${d}</label>`).join('');
 (async function init() {
@@ -209,7 +226,9 @@ $('r-days').innerHTML = DAYS.map(d => `<label><input type="checkbox" value="${d}
     CFG = (await api({ action:'config' })).data;
     $('title').textContent = CFG.systemName; document.title = CFG.systemName;
     $('banner').textContent = `自習開始日 ${CFG.startDate}　｜　${CFG.statusText}`;
-    $('r-sched').innerHTML = '開放時程：<br>' + CFG.schedule.map(esc).join('<br>');
+    $('r-rules').innerHTML = (CFG.rules || []).map(l => l.startsWith('## ') ? `<h3>${esc(l.slice(3))}</h3>` : `<p>${esc(l)}</p>`).join('')
+      || '<p class="hint">（尚未設定報名辦法及公約）</p>';
+    $('r-sched').innerHTML = CFG.schedule.map(esc).join('<br>');
     if (!CFG.open) { ['r-submit','r-withdraw'].forEach(i => $(i).disabled = true); show('r-msg', CFG.statusText + '。如需異動請聯絡夜讀老師。', false); }
     $('v-item').innerHTML = CFG.violationItems.map(i => `<option>${esc(i)}</option>`).join('');
   } catch (e) { $('banner').textContent = '無法連線到後端：' + e.message; }
@@ -223,7 +242,8 @@ function regPayload() {
     cls: $('r-cls').value, seat: $('r-seat').value, name: $('r-name').value,
     days: [...document.querySelectorAll('#r-days input:checked')].map(i => i.value),
     note: $('r-note').value, parent: $('r-parent').value, phone: $('r-phone').value,
-    email: $('r-email').value, code: $('r-code').value, website: $('r-web').value
+    email: $('r-email').value, code: $('r-code').value, website: $('r-web').value,
+    agree: $('r-agree').checked
   };
 }
 $('r-submit').onclick = () => run($('r-submit'), 'r-msg', async () => {
