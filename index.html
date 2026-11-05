@@ -62,6 +62,7 @@
   <div class="card" id="r-rules-card">
     <h2>報名辦法及公約</h2>
     <div id="r-rules">載入中…</div>
+    <div id="r-time"></div>
     <h3>開放時程</h3>
     <div class="hint" id="r-sched"></div>
     <label style="font-weight:400;margin-top:16px"><input type="checkbox" id="r-agree"> 我已閱讀並同意以上報名辦法及公約</label>
@@ -113,6 +114,10 @@
       <div><button class="act sm" id="l-add" style="margin-top:0;padding:9px 14px">加入</button></div>
     </div>
     <div id="l-chips"></div>
+    <div class="hint" id="l-susp"></div>
+    <label>請假節次（可複選，預設全部三節）</label>
+    <div id="l-sess"></div>
+    <div class="hint">夜讀與週六自習的各節時間不同，括號內為各節時間；節與節之間為下課時間。</div>
     <label>請假事由</label><select id="l-reason"></select>
     <label>備註說明 <span class="hint" style="display:inline">（選「其他」時必填）</span></label>
     <textarea id="l-note" rows="2"></textarea>
@@ -145,8 +150,9 @@
         <div><input type="date" id="td-date"></div>
         <div><button class="act sm" id="td-load" style="margin-top:0;padding:9px 14px">查詢</button></div>
       </div>
-      <div class="hint" id="td-sum" style="margin:8px 0"></div>
-      <div class="tablewrap"><table><thead><tr><th>班級</th><th>座號</th><th>姓名</th><th>事由</th><th>備註</th><th>家長電話</th></tr></thead><tbody id="td-body"></tbody></table></div>
+      <div style="margin-top:8px"><select id="td-sess"><option value="">全部節次</option><option value="1">只看第一節請假</option><option value="2">只看第二節請假</option><option value="3">只看第三節請假</option></select></div>
+      <div class="hint" id="td-sum" style="margin:8px 0;line-height:1.7"></div>
+      <div class="tablewrap"><table><thead><tr><th>班級</th><th>座號</th><th>姓名</th><th>請假節次</th><th>事由</th><th>備註</th><th>家長電話</th></tr></thead><tbody id="td-body"></tbody></table></div>
     </div>
 
     <div class="card hide" id="t-vio">
@@ -185,9 +191,10 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbwDxgcbNtNIU4cFoexePhmTkkOTOn0p_eKcDiybHhdF0RgrF7aJqoAJjDYxM_pxFns/exec';
 
 const DAYS = ['週一','週二','週三','週四','週五','週六'];
+const SESS_NAMES = ['第一節','第二節','第三節'];
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let CFG = null, ROSTER = [], LEAVE_AUTH = null, LEAVE_DATES = [];
+let CFG = null, ROSTER = [], LEAVE_AUTH = null, LEAVE_DATES = [], LAST_DAY = null;
 
 async function api(payload) {
   const r = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(payload) });
@@ -235,6 +242,20 @@ $('r-days').innerHTML = DAYS.map(d => `<label><input type="checkbox" value="${d}
     if (!CFG.open) { ['r-submit','r-withdraw'].forEach(i => $(i).disabled = true); show('r-msg', CFG.statusText + '。如需異動請聯絡夜讀老師。', false); }
     $('v-item').innerHTML = CFG.violationItems.map(i => `<option>${esc(i)}</option>`).join('');
     $('l-reason').innerHTML = '<option value="">請選擇</option>' + CFG.leaveReasons.map(i => `<option>${esc(i)}</option>`).join('');
+
+    // 自習時間、節次、暫停原則與暫停日期（全部來自試算表設定）
+    const T = CFG.sessionTimes, rng = a => a.length ? a[0].split('-')[0] + '–' + a[a.length - 1].split('-')[1] : '';
+    const fmtT = a => a.map((t, i) => `${SESS_NAMES[i]} ${t.replace('-', '–')}`).join('、');
+    const susp = CFG.suspended.map(x => `${x.from}${x.to !== x.from ? '～' + x.to : ''}（${x.reason || '暫停'}）`);
+    $('r-time').innerHTML =
+      `<h3>自習時間</h3><p>夜讀（週一～週五）${esc(rng(T.weeknight))}：${esc(fmtT(T.weeknight))}</p>` +
+      `<p>週六自習 ${esc(rng(T.saturday))}：${esc(fmtT(T.saturday))}</p><p>各節之間為下課時間；請假可依節次辦理。</p>` +
+      (CFG.suspendRule ? `<h3>暫停原則</h3><p>${esc(CFG.suspendRule)}</p>` : '') +
+      (susp.length ? `<p>已排定的暫停日期：${susp.map(esc).join('、')}</p>` : '');
+    $('l-sess').innerHTML = SESS_NAMES.map((nm, i) =>
+      `<label style="display:block;font-weight:400"><input type="checkbox" value="${i + 1}" checked> ${nm}` +
+      `（夜讀 ${esc(T.weeknight[i] || '')}／週六 ${esc(T.saturday[i] || '')}）</label>`).join('');
+    $('l-susp').textContent = susp.length ? '暫停日期（不需請假）：' + susp.join('、') : '';
   } catch (e) { $('banner').textContent = '無法連線到後端：' + e.message; }
   $('td-date').value = todayStr(); $('v-date').value = todayStr(); $('l-date').min = todayStr();
   try { if (sessionStorage.getItem('tp')) teacherEnter(); } catch (e) {}
@@ -272,7 +293,7 @@ async function loadLeaves() {
   $('l-box').classList.remove('hide');
   $('l-who').textContent = `${j.data.name}（自習日：${j.data.days.join('、')}）`;
   $('l-list').innerHTML = j.data.leaves.length
-    ? '<table><tbody>' + j.data.leaves.map(l => `<tr><td>${esc(l.date)}</td><td>${esc(l.reason)}${l.note ? '（' + esc(l.note) + '）' : ''}</td><td>${l.date >= todayStr() ? `<button class="act warn sm" data-d="${esc(l.date)}">取消</button>` : ''}</td></tr>`).join('') + '</tbody></table>'
+    ? '<table><tbody>' + j.data.leaves.map(l => `<tr><td>${esc(l.date)}<br><span class="hint">${esc(l.label)}</span></td><td>${esc(l.reason)}${l.note ? '（' + esc(l.note) + '）' : ''}</td><td>${l.date >= todayStr() ? `<button class="act warn sm" data-d="${esc(l.date)}">取消</button>` : ''}</td></tr>`).join('') + '</tbody></table>'
     : '<div class="hint">目前沒有請假紀錄</div>';
   $('l-list').querySelectorAll('button[data-d]').forEach(b => b.onclick = () => run(b, 'l-msg2', async () => {
     if (!confirm('取消 ' + b.dataset.d + ' 的請假？')) return;
@@ -287,10 +308,14 @@ function drawChips() {
 }
 $('l-add').onclick = () => {
   const d = $('l-date').value;
+  const sp = ((CFG && CFG.suspended) || []).find(x => d >= x.from && d <= x.to);
+  if (sp) { show('l-msg2', `${d} 暫停夜讀（${sp.reason || '暫停'}），不需請假`, false); return; }
+  clear('l-msg2');
   if (d && !LEAVE_DATES.includes(d)) { LEAVE_DATES.push(d); LEAVE_DATES.sort(); drawChips(); }
 };
 $('l-submit').onclick = () => run($('l-submit'), 'l-msg2', async () => {
-  const j = await api({ action:'leave', ...LEAVE_AUTH, dates:LEAVE_DATES, reason:$('l-reason').value, note:$('l-note').value });
+  const j = await api({ action:'leave', ...LEAVE_AUTH, dates:LEAVE_DATES, reason:$('l-reason').value, note:$('l-note').value,
+    sessions:[...document.querySelectorAll('#l-sess input:checked')].map(i => Number(i.value)) });
   show('l-msg2', j.msg, true); LEAVE_DATES = []; drawChips(); $('l-reason').value = ''; $('l-note').value = '';
   await loadLeaves();
 });
@@ -310,13 +335,26 @@ $('t-out').onclick = () => { sessionStorage.removeItem('tp'); location.reload();
 
 async function loadDay() {
   const j = await api({ action:'teacherDay', password:tpw(), date:$('td-date').value });
-  const s = j.data.leaves, n = s.length;
-  $('td-sum').textContent = `${j.data.date}（${j.data.dayName}）應到 ${j.data.total} 人，請假 ${n} 人，預計出席 ${j.data.total - n} 人`;
-  $('td-body').innerHTML = n
-    ? s.map(x => `<tr><td>${esc(x.cls)}</td><td>${esc(x.seat)}</td><td>${esc(x.name)}</td><td>${esc(x.reason)}</td><td>${esc(x.note)}</td><td>${esc(x.phone)}</td></tr>`).join('')
-    : '<tr><td colspan="6">當日無人請假</td></tr>';
+  LAST_DAY = j.data; renderDay();
 }
-$('td-load').onclick = () => run($('td-load'), 't-msg0', loadDay).catch(()=>{});
+function renderDay() {
+  if (!LAST_DAY) return;
+  const D = LAST_DAY, f = $('td-sess').value;
+  if (D.suspended) {
+    $('td-sum').textContent = `${D.date}（${D.dayName}）暫停夜讀：${D.suspended}`;
+    $('td-body').innerHTML = '<tr><td colspan="7">當日暫停，無需請假</td></tr>';
+    return;
+  }
+  const T = (CFG && CFG.sessionTimes) ? (D.dayName === '週六' ? CFG.sessionTimes.saturday : CFG.sessionTimes.weeknight) : [];
+  $('td-sum').innerHTML = `${esc(D.date)}（${esc(D.dayName)}）應到 ${D.total} 人<br>` +
+    SESS_NAMES.map((nm, i) => `${nm}${T[i] ? '（' + esc(T[i]) + '）' : ''}：請假 ${D.sessionCounts[i]} 人，預計出席 ${D.total - D.sessionCounts[i]} 人`).join('<br>');
+  const rows = f ? D.leaves.filter(x => x.sessions.includes(Number(f))) : D.leaves;
+  $('td-body').innerHTML = rows.length
+    ? rows.map(x => `<tr><td>${esc(x.cls)}</td><td>${esc(x.seat)}</td><td>${esc(x.name)}</td><td>${esc(x.label)}</td><td>${esc(x.reason)}</td><td>${esc(x.note)}</td><td>${esc(x.phone)}</td></tr>`).join('')
+    : '<tr><td colspan="7">沒有請假名單</td></tr>';
+}
+$('td-sess').onchange = () => renderDay();
+$('td-load').onclick =() => run($('td-load'), 't-msg0', loadDay).catch(()=>{});
 
 function lookupName() {
   const c = $('v-cls').value.trim(), s = String(parseInt($('v-seat').value, 10));
