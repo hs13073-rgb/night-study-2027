@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>夜讀・週六自習系統</title>
+<style>
+  :root { --main:#2563eb; --bg:#f3f6fb; --ok:#15803d; --err:#b91c1c; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif; background:var(--bg); color:#1f2937; }
+  header { background:var(--main); color:#fff; padding:16px; text-align:center; }
+  header h1 { margin:0; font-size:1.3rem; }
+  #banner { margin-top:6px; font-size:.9rem; opacity:.95; }
+  nav { display:flex; max-width:760px; margin:12px auto 0; gap:6px; padding:0 12px; }
+  nav button { flex:1; padding:10px; border:0; border-radius:8px; background:#dbe4f5; font-size:1rem; cursor:pointer; }
+  nav button.on { background:var(--main); color:#fff; }
+  main { max-width:760px; margin:12px auto; padding:0 12px 40px; }
+  .card { background:#fff; border-radius:12px; padding:16px; box-shadow:0 1px 4px rgba(0,0,0,.08); margin-bottom:12px; }
+  h2 { margin:0 0 10px; font-size:1.1rem; }
+  label { display:block; margin:10px 0 4px; font-weight:600; font-size:.92rem; }
+  input[type=text], input[type=number], input[type=email], input[type=date], input[type=password], select, textarea {
+    width:100%; padding:9px; border:1px solid #cbd5e1; border-radius:8px; font-size:1rem; }
+  .row { display:flex; gap:10px; } .row > div { flex:1; }
+  .days label { display:inline-block; margin:4px 10px 4px 0; font-weight:400; }
+  button.act { margin-top:14px; padding:10px 18px; border:0; border-radius:8px; background:var(--main); color:#fff; font-size:1rem; cursor:pointer; }
+  button.sec { background:#64748b; } button.warn { background:#dc2626; }
+  button.sm { padding:4px 10px; font-size:.85rem; margin:0; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .msg { margin-top:10px; padding:8px 10px; border-radius:8px; display:none; white-space:pre-wrap; }
+  .msg.ok { display:block; background:#dcfce7; color:var(--ok); }
+  .msg.err { display:block; background:#fee2e2; color:var(--err); }
+  .hint { font-size:.82rem; color:#64748b; margin-top:3px; }
+  .chip { display:inline-block; background:#e0e7ff; border-radius:14px; padding:3px 10px; margin:3px 4px 0 0; }
+  .chip b { cursor:pointer; margin-left:6px; color:#dc2626; }
+  table { width:100%; border-collapse:collapse; font-size:.92rem; }
+  th, td { border-bottom:1px solid #e5e7eb; padding:6px 4px; text-align:left; }
+  th { background:#f1f5f9; }
+  tr.leave td { background:#fff7ed; }
+  .hide { display:none; } .hp { position:absolute; left:-9999px; }
+  .tabs2 { display:flex; gap:6px; margin-bottom:10px; }
+  .tabs2 button { padding:6px 12px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; cursor:pointer; }
+  .tabs2 button.on { background:var(--main); color:#fff; border-color:var(--main); }
+  .tablewrap { overflow-x:auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">夜讀・週六自習系統</h1>
+  <div id="banner">載入中…</div>
+</header>
+<nav>
+  <button data-p="reg" class="on">報名／加退選</button>
+  <button data-p="leave">家長請假</button>
+  <button data-p="teacher">老師區</button>
+</nav>
+<main>
+
+<!-- ===== 報名 ===== -->
+<section id="p-reg">
+  <div class="card">
+    <h2>學生報名</h2>
+    <div class="row">
+      <div><label>班級</label><input type="text" id="r-cls" placeholder="例：301"></div>
+      <div><label>座號</label><input type="number" id="r-seat" min="1" max="99"></div>
+    </div>
+    <label>姓名</label><input type="text" id="r-name">
+    <label>自習天數（可複選）</label>
+    <div class="days" id="r-days"></div>
+    <label>備註</label><textarea id="r-note" rows="2" placeholder="例：週三需提早 20:00 離開"></textarea>
+    <label>家長姓名</label><input type="text" id="r-parent">
+    <label>連絡電話</label><input type="text" id="r-phone" placeholder="0912345678">
+    <div class="hint">填寫兩人時請以 / 分隔，例：0912345678/0922333444</div>
+    <label>Email 信箱</label><input type="text" id="r-email" placeholder="parent@example.com">
+    <div class="hint">用於寄送驗證碼、請假及違規通知；多個信箱請以 / 分隔</div>
+    <label>家長驗證碼（已報名、要修改或退選時才需填）</label>
+    <input type="text" id="r-code" inputmode="numeric" maxlength="6" autocomplete="off">
+    <input type="text" class="hp" id="r-web" tabindex="-1" autocomplete="off">
+    <button class="act" id="r-submit">送出報名／修改</button>
+    <button class="act warn" id="r-withdraw">退選</button>
+    <button class="act sec" id="r-resend">重寄驗證碼</button>
+    <div class="msg" id="r-msg"></div>
+  </div>
+</section>
+
+<!-- ===== 家長請假 ===== -->
+<section id="p-leave" class="hide">
+  <div class="card">
+    <h2>家長請假</h2>
+    <div class="row">
+      <div><label>班級</label><input type="text" id="l-cls"></div>
+      <div><label>座號</label><input type="number" id="l-seat" min="1" max="99"></div>
+    </div>
+    <label>家長驗證碼</label>
+    <input type="text" id="l-code" inputmode="numeric" maxlength="6" autocomplete="off">
+    <button class="act" id="l-load">驗證並載入</button>
+    <div class="msg" id="l-msg1"></div>
+  </div>
+  <div class="card hide" id="l-box">
+    <h2 id="l-who"></h2>
+    <label>請假日期</label>
+    <div class="row">
+      <div><input type="date" id="l-date"></div>
+      <div><button class="act sm" id="l-add" style="margin-top:0;padding:9px 14px">加入</button></div>
+    </div>
+    <div id="l-chips"></div>
+    <label>請假原因</label><textarea id="l-reason" rows="2"></textarea>
+    <button class="act" id="l-submit">送出請假</button>
+    <div class="msg" id="l-msg2"></div>
+    <h2 style="margin-top:18px">已登記的請假</h2>
+    <div id="l-list"></div>
+  </div>
+</section>
+
+<!-- ===== 老師區 ===== -->
+<section id="p-teacher" class="hide">
+  <div class="card" id="t-login">
+    <h2>夜讀老師登入</h2>
+    <label>老師密碼</label><input type="password" id="t-pw" autocomplete="off">
+    <button class="act" id="t-go">登入</button>
+    <div class="msg" id="t-msg0"></div>
+  </div>
+  <div id="t-main" class="hide">
+    <div class="tabs2">
+      <button data-t="day" class="on">出缺席／請假</button>
+      <button data-t="vio">違規登記</button>
+      <button data-t="log">違規紀錄</button>
+      <button id="t-out" style="margin-left:auto">登出</button>
+    </div>
+
+    <div class="card" id="t-day">
+      <h2>當日名單</h2>
+      <div class="row">
+        <div><input type="date" id="td-date"></div>
+        <div><button class="act sm" id="td-load" style="margin-top:0;padding:9px 14px">查詢</button></div>
+      </div>
+      <div class="hint" id="td-sum" style="margin:8px 0"></div>
+      <div class="tablewrap"><table><thead><tr><th>班級</th><th>座號</th><th>姓名</th><th>狀態</th><th>請假原因</th><th>備註</th></tr></thead><tbody id="td-body"></tbody></table></div>
+    </div>
+
+    <div class="card hide" id="t-vio">
+      <h2>登記違規</h2>
+      <label>日期</label><input type="date" id="v-date">
+      <div class="row">
+        <div><label>班級</label><input type="text" id="v-cls"></div>
+        <div><label>座號</label><input type="number" id="v-seat" min="1" max="99"></div>
+      </div>
+      <div class="hint" id="v-name"></div>
+      <label>違規項目</label><select id="v-item"></select>
+      <label>說明</label><textarea id="v-note" rows="2"></textarea>
+      <label>登記老師</label><input type="text" id="v-teacher">
+      <label style="font-weight:400"><input type="checkbox" id="v-notify" checked> 同時 Email 通知家長</label>
+      <button class="act" id="v-submit">登記</button>
+      <div class="msg" id="v-msg"></div>
+    </div>
+
+    <div class="card hide" id="t-log">
+      <h2>違規紀錄</h2>
+      <div class="row">
+        <div><input type="text" id="g-cls" placeholder="班級（可空）"></div>
+        <div><input type="number" id="g-seat" placeholder="座號（可空）"></div>
+        <div><button class="act sm" id="g-load" style="margin-top:0;padding:9px 14px">查詢</button></div>
+      </div>
+      <div class="tablewrap" style="margin-top:10px"><table><thead><tr><th>日期</th><th>班級</th><th>座號</th><th>姓名</th><th>項目</th><th>說明</th><th>老師</th><th>通知</th></tr></thead><tbody id="g-body"></tbody></table></div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<script>
+/* ★ 部署 Apps Script 後，把「網頁應用程式網址」貼在這裡 ★ */
+const API_URL = 'https://script.google.com/macros/s/請換成你的部署ID/exec';
+
+const DAYS = ['週一','週二','週三','週四','週五','週六'];
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let CFG = null, ROSTER = [], LEAVE_AUTH = null, LEAVE_DATES = [];
+
+async function api(payload) {
+  const r = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(payload) });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.msg || '發生錯誤');
+  return j;
+}
+function show(id, text, ok) { const e = $(id); e.className = 'msg ' + (ok ? 'ok' : 'err'); e.textContent = text; }
+function clear(id) { $(id).className = 'msg'; }
+async function run(btn, msgId, fn) {
+  btn.disabled = true; clear(msgId);
+  try { await fn(); } catch (e) { show(msgId, e.message, false); }
+  btn.disabled = false;
+}
+function todayStr() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,10); }
+
+/* ===== 導覽 ===== */
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  ['reg','leave','teacher'].forEach(p => $('p-' + p).classList.toggle('hide', p !== b.dataset.p));
+});
+document.querySelectorAll('.tabs2 button[data-t]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs2 button[data-t]').forEach(x => x.classList.toggle('on', x === b));
+  ['day','vio','log'].forEach(t => $('t-' + t).classList.toggle('hide', t !== b.dataset.t));
+});
+
+/* ===== 初始化 ===== */
+$('r-days').innerHTML = DAYS.map(d => `<label><input type="checkbox" value="${d}"> ${d}</label>`).join('');
+(async function init() {
+  try {
+    CFG = (await api({ action:'config' })).data;
+    $('title').textContent = CFG.systemName; document.title = CFG.systemName;
+    $('banner').textContent = CFG.open
+      ? `自習開始日 ${CFG.startDate}　｜　報名／加退選至 ${CFG.deadline} 止`
+      : `報名／加退選已於 ${CFG.deadline} 截止`;
+    if (!CFG.open) { ['r-submit','r-withdraw'].forEach(i => $(i).disabled = true); show('r-msg', '報名／加退選已截止，如需異動請聯絡夜讀老師。', false); }
+    $('v-item').innerHTML = CFG.violationItems.map(i => `<option>${esc(i)}</option>`).join('');
+  } catch (e) { $('banner').textContent = '無法連線到後端：' + e.message; }
+  $('td-date').value = todayStr(); $('v-date').value = todayStr(); $('l-date').min = todayStr();
+  try { if (sessionStorage.getItem('tp')) teacherEnter(); } catch (e) {}
+})();
+
+/* ===== 報名 ===== */
+function regPayload() {
+  return {
+    cls: $('r-cls').value, seat: $('r-seat').value, name: $('r-name').value,
+    days: [...document.querySelectorAll('#r-days input:checked')].map(i => i.value),
+    note: $('r-note').value, parent: $('r-parent').value, phone: $('r-phone').value,
+    email: $('r-email').value, code: $('r-code').value, website: $('r-web').value
+  };
+}
+$('r-submit').onclick = () => run($('r-submit'), 'r-msg', async () => {
+  const j = await api({ action:'register', ...regPayload() });
+  show('r-msg', j.msg, true);
+});
+$('r-withdraw').onclick = () => run($('r-withdraw'), 'r-msg', async () => {
+  if (!confirm('確定要退選夜讀自習嗎？')) return;
+  const j = await api({ action:'withdraw', cls:$('r-cls').value, seat:$('r-seat').value, code:$('r-code').value });
+  show('r-msg', j.msg, true);
+});
+$('r-resend').onclick = () => run($('r-resend'), 'r-msg', async () => {
+  const j = await api({ action:'resendCode', cls:$('r-cls').value, seat:$('r-seat').value, email:$('r-email').value });
+  show('r-msg', j.msg, true);
+});
+
+/* ===== 家長請假 ===== */
+function leaveBase() { return { cls:$('l-cls').value, seat:$('l-seat').value, code:$('l-code').value }; }
+async function loadLeaves() {
+  const j = await api({ action:'myLeaves', ...leaveBase() });
+  LEAVE_AUTH = leaveBase();
+  $('l-box').classList.remove('hide');
+  $('l-who').textContent = `${j.data.name}（自習日：${j.data.days.join('、')}）`;
+  $('l-list').innerHTML = j.data.leaves.length
+    ? '<table><tbody>' + j.data.leaves.map(l => `<tr><td>${esc(l.date)}</td><td>${esc(l.reason)}</td><td>${l.date >= todayStr() ? `<button class="act warn sm" data-d="${esc(l.date)}">取消</button>` : ''}</td></tr>`).join('') + '</tbody></table>'
+    : '<div class="hint">目前沒有請假紀錄</div>';
+  $('l-list').querySelectorAll('button[data-d]').forEach(b => b.onclick = () => run(b, 'l-msg2', async () => {
+    if (!confirm('取消 ' + b.dataset.d + ' 的請假？')) return;
+    const r = await api({ action:'cancelLeave', ...LEAVE_AUTH, date:b.dataset.d });
+    show('l-msg2', r.msg, true); await loadLeaves();
+  }));
+}
+$('l-load').onclick = () => run($('l-load'), 'l-msg1', loadLeaves);
+function drawChips() {
+  $('l-chips').innerHTML = LEAVE_DATES.map((d,i) => `<span class="chip">${esc(d)}<b data-i="${i}">×</b></span>`).join('');
+  $('l-chips').querySelectorAll('b').forEach(b => b.onclick = () => { LEAVE_DATES.splice(+b.dataset.i, 1); drawChips(); });
+}
+$('l-add').onclick = () => {
+  const d = $('l-date').value;
+  if (d && !LEAVE_DATES.includes(d)) { LEAVE_DATES.push(d); LEAVE_DATES.sort(); drawChips(); }
+};
+$('l-submit').onclick = () => run($('l-submit'), 'l-msg2', async () => {
+  const j = await api({ action:'leave', ...LEAVE_AUTH, dates:LEAVE_DATES, reason:$('l-reason').value });
+  show('l-msg2', j.msg, true); LEAVE_DATES = []; drawChips(); $('l-reason').value = '';
+  await loadLeaves();
+});
+
+/* ===== 老師區 ===== */
+const tpw = () => sessionStorage.getItem('tp') || '';
+async function teacherEnter() {
+  ROSTER = (await api({ action:'teacherRoster', password:tpw() })).data;
+  $('t-login').classList.add('hide'); $('t-main').classList.remove('hide');
+  loadDay();
+}
+$('t-go').onclick = () => run($('t-go'), 't-msg0', async () => {
+  sessionStorage.setItem('tp', $('t-pw').value);
+  try { await teacherEnter(); } catch (e) { sessionStorage.removeItem('tp'); throw e; }
+});
+$('t-out').onclick = () => { sessionStorage.removeItem('tp'); location.reload(); };
+
+async function loadDay() {
+  const j = await api({ action:'teacherDay', password:tpw(), date:$('td-date').value });
+  const s = j.data.students, leave = s.filter(x => x.onLeave).length;
+  $('td-sum').textContent = `${j.data.date}（${j.data.dayName}）應到 ${s.length} 人，請假 ${leave} 人，預計出席 ${s.length - leave} 人`;
+  $('td-body').innerHTML = s.map(x => `<tr class="${x.onLeave ? 'leave' : ''}"><td>${esc(x.cls)}</td><td>${esc(x.seat)}</td><td>${esc(x.name)}</td><td>${x.onLeave ? '請假' : '出席'}</td><td>${esc(x.reason)}</td><td>${esc(x.note)}</td></tr>`).join('');
+}
+$('td-load').onclick = () => run($('td-load'), 't-msg0', loadDay).catch(()=>{});
+
+function lookupName() {
+  const c = $('v-cls').value.trim(), s = String(parseInt($('v-seat').value, 10));
+  const r = ROSTER.find(x => x.cls === c && x.seat === s);
+  $('v-name').textContent = r ? '學生：' + r.name : ($('v-cls').value && $('v-seat').value ? '查無此學生' : '');
+}
+$('v-cls').oninput = lookupName; $('v-seat').oninput = lookupName;
+$('v-submit').onclick = () => run($('v-submit'), 'v-msg', async () => {
+  const j = await api({ action:'violationAdd', password:tpw(), date:$('v-date').value, cls:$('v-cls').value, seat:$('v-seat').value,
+    item:$('v-item').value, note:$('v-note').value, teacher:$('v-teacher').value, notify:$('v-notify').checked });
+  show('v-msg', j.msg, true); $('v-note').value = ''; $('v-seat').value = ''; $('v-name').textContent = '';
+});
+$('g-load').onclick = () => run($('g-load'), 't-msg0', async () => {
+  const j = await api({ action:'violationList', password:tpw(), cls:$('g-cls').value, seat:$('g-seat').value });
+  $('g-body').innerHTML = j.data.map(r => `<tr><td>${esc(r.date)}</td><td>${esc(r.cls)}</td><td>${esc(r.seat)}</td><td>${esc(r.name)}</td><td>${esc(r.item)}</td><td>${esc(r.note)}</td><td>${esc(r.teacher)}</td><td>${esc(r.notified)}</td></tr>`).join('') || '<tr><td colspan="8">沒有紀錄</td></tr>';
+});
+</script>
+</body>
+</html>
