@@ -59,8 +59,9 @@
 <section id="p-reg">
   <div class="card">
     <h2>學生報名</h2>
+    <div class="hint" id="r-sched" style="margin-bottom:6px"></div>
     <div class="row">
-      <div><label>班級</label><input type="text" id="r-cls" placeholder="例：301"></div>
+      <div><label>班級</label><input type="text" id="r-cls" placeholder="例：901"></div>
       <div><label>座號</label><input type="number" id="r-seat" min="1" max="99"></div>
     </div>
     <label>姓名</label><input type="text" id="r-name">
@@ -207,10 +208,9 @@ $('r-days').innerHTML = DAYS.map(d => `<label><input type="checkbox" value="${d}
   try {
     CFG = (await api({ action:'config' })).data;
     $('title').textContent = CFG.systemName; document.title = CFG.systemName;
-    $('banner').textContent = CFG.open
-      ? `自習開始日 ${CFG.startDate}　｜　報名／加退選至 ${CFG.deadline} 止`
-      : `報名／加退選已於 ${CFG.deadline} 截止`;
-    if (!CFG.open) { ['r-submit','r-withdraw'].forEach(i => $(i).disabled = true); show('r-msg', '報名／加退選已截止，如需異動請聯絡夜讀老師。', false); }
+    $('banner').textContent = `自習開始日 ${CFG.startDate}　｜　${CFG.statusText}`;
+    $('r-sched').innerHTML = '開放時程：<br>' + CFG.schedule.map(esc).join('<br>');
+    if (!CFG.open) { ['r-submit','r-withdraw'].forEach(i => $(i).disabled = true); show('r-msg', CFG.statusText + '。如需異動請聯絡夜讀老師。', false); }
     $('v-item').innerHTML = CFG.violationItems.map(i => `<option>${esc(i)}</option>`).join('');
   } catch (e) { $('banner').textContent = '無法連線到後端：' + e.message; }
   $('td-date').value = todayStr(); $('v-date').value = todayStr(); $('l-date').min = todayStr();
