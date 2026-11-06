@@ -115,9 +115,9 @@
     </div>
     <div id="l-chips"></div>
     <div class="hint" id="l-susp"></div>
-    <label>請假節次（可複選，預設全部三節）</label>
+    <label>請假節次（可複選，預設全部節次）</label>
     <div id="l-sess"></div>
-    <div class="hint">夜讀與週六自習的各節時間不同，括號內為各節時間；節與節之間為下課時間。</div>
+    <div class="hint">夜讀與週六自習的節數、時間不同，括號內為各節時間；若請假日期沒有該節（例如夜讀只有三節），該節會自動略過。</div>
     <label>請假事由</label><select id="l-reason"></select>
     <label>備註說明 <span class="hint" style="display:inline">（選「其他」時必填）</span></label>
     <textarea id="l-note" rows="2"></textarea>
@@ -150,7 +150,7 @@
         <div><input type="date" id="td-date"></div>
         <div><button class="act sm" id="td-load" style="margin-top:0;padding:9px 14px">查詢</button></div>
       </div>
-      <div style="margin-top:8px"><select id="td-sess"><option value="">全部節次</option><option value="1">只看第一節請假</option><option value="2">只看第二節請假</option><option value="3">只看第三節請假</option></select></div>
+      <div style="margin-top:8px"><select id="td-sess"><option value="">全部節次</option></select></div>
       <div class="hint" id="td-sum" style="margin:8px 0;line-height:1.7"></div>
       <div class="tablewrap"><table><thead><tr><th>班級</th><th>座號</th><th>姓名</th><th>請假節次</th><th>事由</th><th>備註</th><th>家長電話</th></tr></thead><tbody id="td-body"></tbody></table></div>
     </div>
@@ -191,7 +191,7 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbwDxgcbNtNIU4cFoexePhmTkkOTOn0p_eKcDiybHhdF0RgrF7aJqoAJjDYxM_pxFns/exec';
 
 const DAYS = ['週一','週二','週三','週四','週五','週六'];
-const SESS_NAMES = ['第一節','第二節','第三節'];
+const SESS_NAMES = ['第一節','第二節','第三節','第四節','第五節','第六節','第七節','第八節'];
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let CFG = null, ROSTER = [], LEAVE_AUTH = null, LEAVE_DATES = [], LAST_DAY = null;
@@ -243,21 +243,36 @@ $('r-days').innerHTML = DAYS.map(d => `<label><input type="checkbox" value="${d}
     $('v-item').innerHTML = CFG.violationItems.map(i => `<option>${esc(i)}</option>`).join('');
     $('l-reason').innerHTML = '<option value="">請選擇</option>' + CFG.leaveReasons.map(i => `<option>${esc(i)}</option>`).join('');
 
-    // 自習時間、節次、暫停原則與暫停日期（全部來自試算表設定）
-    const T = CFG.sessionTimes, rng = a => a.length ? a[0].split('-')[0] + '–' + a[a.length - 1].split('-')[1] : '';
+    // 自習期間、時間、節次、暫停原則與暫停日期（全部來自試算表設定）
+    const T = CFG.sessionTimes, P = CFG.periods, rng = a => a.length ? a[0].split('-')[0] + '–' + a[a.length - 1].split('-')[1] : '';
     const fmtT = a => a.map((t, i) => `${SESS_NAMES[i]} ${t.replace('-', '–')}`).join('、');
     const susp = CFG.suspended.map(x => `${x.from}${x.to !== x.from ? '～' + x.to : ''}（${x.reason || '暫停'}）`);
     $('r-time').innerHTML =
-      `<h3>自習時間</h3><p>夜讀（週一～週五）${esc(rng(T.weeknight))}：${esc(fmtT(T.weeknight))}</p>` +
-      `<p>週六自習 ${esc(rng(T.saturday))}：${esc(fmtT(T.saturday))}</p><p>各節之間為下課時間；請假可依節次辦理。</p>` +
+      `<h3>自習時間</h3>` +
+      `<p>夜讀（週一～週五）${esc(P.weeknight.from)} ～ ${esc(P.weeknight.to)}，每天 ${esc(rng(T.weeknight))}<br>${esc(fmtT(T.weeknight))}</p>` +
+      (CFG.dinner ? `<p>${esc(CFG.dinner)}</p>` : '') +
+      `<p>週六自習 ${esc(P.saturday.from)} ～ ${esc(P.saturday.to)}，每週六 ${esc(rng(T.saturday))}<br>${esc(fmtT(T.saturday))}</p>` +
+      `<p>各節之間為下課時間；請假可依節次辦理。</p>` +
       (CFG.suspendRule ? `<h3>暫停原則</h3><p>${esc(CFG.suspendRule)}</p>` : '') +
       (susp.length ? `<p>已排定的暫停日期：${susp.map(esc).join('、')}</p>` : '');
-    $('l-sess').innerHTML = SESS_NAMES.map((nm, i) =>
-      `<label style="display:block;font-weight:400"><input type="checkbox" value="${i + 1}" checked> ${nm}` +
-      `（夜讀 ${esc(T.weeknight[i] || '')}／週六 ${esc(T.saturday[i] || '')}）</label>`).join('');
+    const maxS = Math.max(T.weeknight.length, T.saturday.length, 1);
+    $('l-sess').innerHTML = SESS_NAMES.slice(0, maxS).map((nm, i) => {
+      const parts = [];
+      if (T.weeknight[i]) parts.push('夜讀 ' + T.weeknight[i]);
+      if (T.saturday[i]) parts.push('週六 ' + T.saturday[i]);
+      return `<label style="display:block;font-weight:400"><input type="checkbox" value="${i + 1}" checked> ${nm}（${esc(parts.join('／'))}）</label>`;
+    }).join('');
+    $('td-sess').innerHTML = '<option value="">全部節次</option>' + SESS_NAMES.slice(0, maxS).map((nm, i) => `<option value="${i + 1}">只看${nm}請假</option>`).join('');
     $('l-susp').textContent = susp.length ? '暫停日期（不需請假）：' + susp.join('、') : '';
   } catch (e) { $('banner').textContent = '無法連線到後端：' + e.message; }
-  $('td-date').value = todayStr(); $('v-date').value = todayStr(); $('l-date').min = todayStr();
+  $('td-date').value = todayStr(); $('v-date').value = todayStr();
+  // 請假日期只能選自習期間內（今天以前、期間以外的日期選不到）
+  $('l-date').min = todayStr();
+  if (CFG && CFG.periods) {
+    const P = CFG.periods, froms = [P.weeknight.from, P.saturday.from].filter(Boolean).sort(), tos = [P.weeknight.to, P.saturday.to].filter(Boolean).sort();
+    if (froms.length && froms[0] > todayStr()) $('l-date').min = froms[0];
+    if (tos.length) $('l-date').max = tos[tos.length - 1];
+  }
   try { if (sessionStorage.getItem('tp')) teacherEnter(); } catch (e) {}
 })();
 
@@ -306,10 +321,23 @@ function drawChips() {
   $('l-chips').innerHTML = LEAVE_DATES.map((d,i) => `<span class="chip">${esc(d)}<b data-i="${i}">×</b></span>`).join('');
   $('l-chips').querySelectorAll('b').forEach(b => b.onclick = () => { LEAVE_DATES.splice(+b.dataset.i, 1); drawChips(); });
 }
+function dayCheck(d) {
+  if (!d) return '請先選擇日期';
+  const u = new Date(d + 'T00:00:00').getDay();   // 0＝週日
+  if (u === 0) return `${d} 是週日，沒有夜讀或自習`;
+  const P = CFG && CFG.periods;
+  if (P) {
+    const p = u === 6 ? P.saturday : P.weeknight;
+    if ((p.from && d < p.from) || (p.to && d > p.to)) return `${d} 不在${u === 6 ? '週六自習' : '夜讀'}期間（${p.from} ～ ${p.to}）`;
+  }
+  const sp = ((CFG && CFG.suspended) || []).find(x => d >= x.from && d <= x.to);
+  if (sp) return `${d} 暫停夜讀（${sp.reason || '暫停'}），不需請假`;
+  return '';
+}
 $('l-add').onclick = () => {
   const d = $('l-date').value;
-  const sp = ((CFG && CFG.suspended) || []).find(x => d >= x.from && d <= x.to);
-  if (sp) { show('l-msg2', `${d} 暫停夜讀（${sp.reason || '暫停'}），不需請假`, false); return; }
+  const bad = dayCheck(d);
+  if (bad) { show('l-msg2', bad, false); return; }
   clear('l-msg2');
   if (d && !LEAVE_DATES.includes(d)) { LEAVE_DATES.push(d); LEAVE_DATES.sort(); drawChips(); }
 };
@@ -340,14 +368,14 @@ async function loadDay() {
 function renderDay() {
   if (!LAST_DAY) return;
   const D = LAST_DAY, f = $('td-sess').value;
-  if (D.suspended) {
-    $('td-sum').textContent = `${D.date}（${D.dayName}）暫停夜讀：${D.suspended}`;
-    $('td-body').innerHTML = '<tr><td colspan="7">當日暫停，無需請假</td></tr>';
+  if (D.closedText) {
+    $('td-sum').textContent = `${D.date}（${D.dayName}）${D.closedText}`;
+    $('td-body').innerHTML = '<tr><td colspan="7">當日不需請假</td></tr>';
     return;
   }
-  const T = (CFG && CFG.sessionTimes) ? (D.dayName === '週六' ? CFG.sessionTimes.saturday : CFG.sessionTimes.weeknight) : [];
+  const T = D.times || [];
   $('td-sum').innerHTML = `${esc(D.date)}（${esc(D.dayName)}）應到 ${D.total} 人<br>` +
-    SESS_NAMES.map((nm, i) => `${nm}${T[i] ? '（' + esc(T[i]) + '）' : ''}：請假 ${D.sessionCounts[i]} 人，預計出席 ${D.total - D.sessionCounts[i]} 人`).join('<br>');
+    D.sessionCounts.map((c, i) => `${SESS_NAMES[i]}${T[i] ? '（' + esc(T[i]) + '）' : ''}：請假 ${c} 人，預計出席 ${D.total - c} 人`).join('<br>');
   const rows = f ? D.leaves.filter(x => x.sessions.includes(Number(f))) : D.leaves;
   $('td-body').innerHTML = rows.length
     ? rows.map(x => `<tr><td>${esc(x.cls)}</td><td>${esc(x.seat)}</td><td>${esc(x.name)}</td><td>${esc(x.label)}</td><td>${esc(x.reason)}</td><td>${esc(x.note)}</td><td>${esc(x.phone)}</td></tr>`).join('')
