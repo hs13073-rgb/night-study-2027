@@ -132,7 +132,9 @@
 <section id="p-teacher" class="hide">
   <div class="card" id="t-login">
     <h2>夜讀老師登入</h2>
-    <label>老師密碼</label><input type="password" id="t-pw" autocomplete="off">
+    <label>姓名（登入帳號）</label><input type="text" id="t-name" autocomplete="username">
+    <label>密碼</label><input type="password" id="t-pw" autocomplete="current-password">
+    <div class="hint">帳號與密碼由管理者建立在「老師名單」；登入後可自行修改密碼。</div>
     <button class="act" id="t-go">登入</button>
     <div class="msg" id="t-msg0"></div>
   </div>
@@ -141,6 +143,7 @@
       <button data-t="day" class="on">當日請假</button>
       <button data-t="vio">違規登記</button>
       <button data-t="log">違規紀錄</button>
+      <button data-t="pwd">修改密碼</button>
       <button id="t-out" style="margin-left:auto">登出</button>
     </div>
 
@@ -165,10 +168,20 @@
       <div class="hint" id="v-name"></div>
       <label>違規項目</label><select id="v-item"></select>
       <label>說明</label><textarea id="v-note" rows="2"></textarea>
-      <label>登記老師</label><input type="text" id="v-teacher">
+      <div class="hint" id="v-teacher-hint" style="margin-top:10px"></div>
       <label style="font-weight:400"><input type="checkbox" id="v-notify" checked> 同時 Email 通知家長</label>
       <button class="act" id="v-submit">登記</button>
       <div class="msg" id="v-msg"></div>
+    </div>
+
+    <div class="card hide" id="t-pwd">
+      <h2>修改我的密碼</h2>
+      <div class="hint" id="t-me"></div>
+      <label>目前密碼</label><input type="password" id="p-old" autocomplete="current-password">
+      <label>新密碼（至少 6 碼）</label><input type="password" id="p-new" autocomplete="new-password">
+      <label>再輸入一次新密碼</label><input type="password" id="p-new2" autocomplete="new-password">
+      <button class="act" id="p-submit">修改密碼</button>
+      <div class="msg" id="p-msg"></div>
     </div>
 
     <div class="card hide" id="t-log">
@@ -218,7 +231,7 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 });
 document.querySelectorAll('.tabs2 button[data-t]').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs2 button[data-t]').forEach(x => x.classList.toggle('on', x === b));
-  ['day','vio','log'].forEach(t => $('t-' + t).classList.toggle('hide', t !== b.dataset.t));
+  ['day','vio','log','pwd'].forEach(t => $('t-' + t).classList.toggle('hide', t !== b.dataset.t));
 });
 
 /* ===== 同意公約後才進入報名表單 ===== */
@@ -349,20 +362,33 @@ $('l-submit').onclick = () => run($('l-submit'), 'l-msg2', async () => {
 });
 
 /* ===== 老師區 ===== */
+const tname = () => sessionStorage.getItem('tn') || '';
 const tpw = () => sessionStorage.getItem('tp') || '';
+const tauth = () => ({ teacher: tname(), password: tpw() });
+function tclear() { sessionStorage.removeItem('tn'); sessionStorage.removeItem('tp'); }
 async function teacherEnter() {
-  ROSTER = (await api({ action:'teacherRoster', password:tpw() })).data;
+  const j = await api({ action:'teacherRoster', ...tauth() });
+  ROSTER = j.data;
   $('t-login').classList.add('hide'); $('t-main').classList.remove('hide');
+  $('t-me').textContent = '目前登入：' + j.teacher;
+  $('v-teacher-hint').textContent = '登記老師：' + j.teacher + '（依登入帳號自動帶入）';
   loadDay();
 }
 $('t-go').onclick = () => run($('t-go'), 't-msg0', async () => {
-  sessionStorage.setItem('tp', $('t-pw').value);
-  try { await teacherEnter(); } catch (e) { sessionStorage.removeItem('tp'); throw e; }
+  sessionStorage.setItem('tn', $('t-name').value.trim()); sessionStorage.setItem('tp', $('t-pw').value);
+  try { await teacherEnter(); } catch (e) { tclear(); throw e; }
 });
-$('t-out').onclick = () => { sessionStorage.removeItem('tp'); location.reload(); };
+$('t-out').onclick = () => { tclear(); location.reload(); };
+$('p-submit').onclick = () => run($('p-submit'), 'p-msg', async () => {
+  if ($('p-new').value !== $('p-new2').value) throw new Error('兩次輸入的新密碼不一致');
+  const j = await api({ action:'teacherPassword', teacher:tname(), password:$('p-old').value, newPassword:$('p-new').value });
+  sessionStorage.setItem('tp', $('p-new').value);
+  ['p-old','p-new','p-new2'].forEach(i => $(i).value = '');
+  show('p-msg', j.msg, true);
+});
 
 async function loadDay() {
-  const j = await api({ action:'teacherDay', password:tpw(), date:$('td-date').value });
+  const j = await api({ action:'teacherDay', ...tauth(), date:$('td-date').value });
   LAST_DAY = j.data; renderDay();
 }
 function renderDay() {
@@ -391,12 +417,12 @@ function lookupName() {
 }
 $('v-cls').oninput = lookupName; $('v-seat').oninput = lookupName;
 $('v-submit').onclick = () => run($('v-submit'), 'v-msg', async () => {
-  const j = await api({ action:'violationAdd', password:tpw(), date:$('v-date').value, cls:$('v-cls').value, seat:$('v-seat').value,
-    item:$('v-item').value, note:$('v-note').value, teacher:$('v-teacher').value, notify:$('v-notify').checked });
+  const j = await api({ action:'violationAdd', ...tauth(), date:$('v-date').value, cls:$('v-cls').value, seat:$('v-seat').value,
+    item:$('v-item').value, note:$('v-note').value, notify:$('v-notify').checked });
   show('v-msg', j.msg, !j.reached); $('v-note').value = ''; $('v-seat').value = ''; $('v-name').textContent = '';
 });
 $('g-load').onclick = () => run($('g-load'), 't-msg0', async () => {
-  const j = await api({ action:'violationList', password:tpw(), cls:$('g-cls').value, seat:$('g-seat').value });
+  const j = await api({ action:'violationList', ...tauth(), cls:$('g-cls').value, seat:$('g-seat').value });
   $('g-body').innerHTML = j.data.map(r => `<tr><td>${esc(r.date)}</td><td>${esc(r.cls)}</td><td>${esc(r.seat)}</td><td>${esc(r.name)}</td><td>${esc(r.item)}</td><td>${esc(r.note)}</td><td>${esc(r.teacher)}</td><td>${esc(r.notified)}</td><td>${esc(r.points)}</td></tr>`).join('') || '<tr><td colspan="9">沒有紀錄</td></tr>';
   $('g-sum').textContent = ($('g-cls').value.trim() && $('g-seat').value) ? `此學生共 ${j.data.length} 點` : '';
 });
